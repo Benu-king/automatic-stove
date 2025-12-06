@@ -1,0 +1,91 @@
+# ------------------------------------------------------------
+# Voice-Controlled Stove System (Arduino + Python)
+# Author: Benayas Wondwosen
+# ------------------------------------------------------------
+
+import speech_recognition as sr
+import serial
+import time
+from gtts import gTTS
+import pyglet
+import os
+
+arduino = serial.Serial('COM9', 9600)
+
+
+def speak(text):
+    tts = gTTS(text=text, lang='am')
+    filename = "response.mp3"
+    tts.save(filename)
+
+    player = pyglet.media.Player()
+    source = pyglet.media.load(filename, streaming=False)
+    player.queue(source)
+    player.play()
+
+    while player.playing:
+        pyglet.app.platform_event_loop.dispatch_posted_events()
+        time.sleep(0.1)
+
+    os.remove(filename)
+
+
+r = sr.Recognizer()
+mic = sr.Microphone()
+
+print("ድምፅ መስማት ዝግጁ ነው...")
+
+while True:
+    with mic as source:
+        r.adjust_for_ambient_noise(source)
+        print("ተናገር...")
+        audio = r.listen(source)
+
+    try:
+        text = r.recognize_google(audio, language="en-US")
+        print("አስተውሏል:", text)
+        low = text.lower()
+
+        turn_on_triggers = ["turn on", "switch on", "turn the stove on", "stove on", "on"]
+        turn_off_triggers = ["turn off", "switch off", "turn the stove off", "stove off", "off"]
+
+        matched = False
+
+        # Amharic triggers
+        if "አብሪ" in text or "ስቶቩን አብሬ" in text:
+            print("💡 stove ON")
+            arduino.write(b"on\n")
+            speak("እሺ በንያስ እስቶቭን አብርቼዋለው")
+            matched = True
+
+        elif "አጥፊ" in text or "አጥፊው" in text:
+            print("💡 stove OFF")
+            arduino.write(b"off\n")
+            speak("እሺ እስቶቭን አጥፍቼዋለሁ")
+            matched = True
+
+        # English triggers
+        if not matched:
+            for trig in turn_on_triggers:
+                if trig in low:
+                    print("💡 stove ON (English trigger)")
+                    arduino.write(b"on\n")
+                    speak("እሺ በንያስ እስቶቭን አብርቼዋለው")
+                    matched = True
+                    break
+
+        if not matched:
+            for trig in turn_off_triggers:
+                if trig in low:
+                    print("💡 stove OFF (English trigger)")
+                    arduino.write(b"off\n")
+                    speak("እሺ እስቶቭን አጥፍቼዋለሁ")
+                    matched = True
+                    break
+
+        if not matched:
+            print("ያ ትእዛዝ አልተረዳውም!")
+            speak("ያ ትእዛዝ አልተረዳውም")
+
+    except Exception as e:
+        print("ችግር:", e)
